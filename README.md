@@ -1,46 +1,79 @@
-ZYNOVEA — Autonomous Clinical Voice AI Engine
+<div align="center">
 
-ZYNOVEA is a low-latency, real-time voice-AI clinical assistant designed to handle patient inquiries, appointment scheduling, and administrative clinic workflows. Built with a deterministic safety firewall, ZYNOVEA immediately intercepts medical emergencies and clinical advice requests, escalating them to human physicians before reaching the LLM layer.
+# 🩺 ZYNOVEA
+### *Autonomous Voice-AI Clinical Assistant with Zero-Latency Safety Triage*
 
-.
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![Groq](https://img.shields.io/badge/Groq-Fast_Inference-f55036?style=for-the-badge)](https://groq.com)
+[![Qdrant](https://img.shields.io/badge/Qdrant-Vector_RAG-dc2626?style=for-the-badge&logo=qdrant&logoColor=white)](https://qdrant.tech)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
-🌟 Key Features
-Real-Time Voice Pipeline: Bi-directional streaming with sub-second response times using WebSockets and the Web Speech API.
+<p align="center">
+  A real-time, bi-directional voice agent tailored for healthcare clinics.<br>
+  Equipped with a deterministic safety firewall that intercepts critical emergencies and clinical inquiries instantly.
+</p>
 
-Deterministic Safety Firewall: Zero-latency regex triage layer that intercepts acute emergencies (e.g., chest pain, respiratory distress) and clinical advice requests (e.g., medication, diagnoses), routing them directly to human physicians.
+---
 
-Semantic RAG Memory: Vector search powered by Qdrant (with embedded in-memory fallback) to retrieve clinic operating hours, doctor schedules, and patient context.
+</div>
 
-High-Speed Inference: Ultra-fast LLM completion via Groq for conversational responses.
+## 📌 Key Highlights
 
-Vocal Synthesis: Lifelike voice synthesis powered by Rime TTS.
+* ⚡ **Ultra-Low Latency Voice Pipeline:** Full-duplex WebSocket architecture integrated with the browser Web Speech API.
+* 🛡️ **Deterministic Safety Firewall:** Zero-latency regex interception for critical emergencies (*e.g., chest pain, respiratory distress*) and clinical inquiries (*e.g., drug prescriptions, symptom triage*).
+* 🧠 **Semantic Vector Memory (RAG):** Powered by **Qdrant** with automatic in-memory fallback for retrieving operating hours, doctor schedules, and patient context.
+* 🚀 **Fast LLM Generation:** Ultra-fast sub-second token streaming powered by **Groq**.
+* 🗣️ **Vocal Synthesis:** Embedded text-to-speech rendering powered by **Rime TTS**.
+* 🌐 **Self-Contained UI:** Zero-build single-file web client served natively via FastAPI static mounting.
 
-Unified Single-File UI: Embedded frontend served directly via FastAPI static mounting.
+---
 
-🏗️ Architecture Overview
-[ Browser / Web Speech API ]
-            │ (WebSocket)
-            ▼
-   [ FastAPI Backend ]
-            │
-   [ Safety Firewall ] ──(Emergency/Clinical Trigger)──► [ Immediate Escalation UI ]
-            │ (Safe Admin Query)
-            ▼
-  [ Qdrant Vector DB ] ──(Clinic Schedule / Context)
-            │
-            ▼
-      [ Groq LLM ]
-            │
-            ▼
-    [ Rime Voice TTS ] ──(Audio Stream)──► [ User Audio Playback ]
+## 🏗️ System Architecture
 
-    📂 Project Structure
-    ZYNOVEA/
-├── backend/
-│   ├── main.py              # FastAPI application, WebSocket server, safety filters
-│   └── qdrant_helper.py     # Qdrant vector retrieval, embeddings, and in-memory fallback
-├── frontend/
-│   └── index.html           # Single-file frontend (HTML, CSS, Web Speech JS)
-├── .env                     # API keys and environment variables (ignored in Git)
-├── .gitignore               # Ignored files and directories
-└── requirements.txt         # Project dependencies
+```text
+       ┌──────────────────────────────┐
+       │ Browser Web Speech Interface │
+       └──────────────┬───────────────┘
+                      │ (WebSocket /ws/call)
+                      ▼
+             ┌─────────────────┐
+             │ FastAPI Backend │
+             └────────┬────────┘
+                      │
+       ┌──────────────┴──────────────┐
+       │  Deterministic Safety Gate  │
+       └──────┬───────────────┬──────┘
+              │               │
+     [Emergency/Clinical]  [Safe Admin Query]
+              │               │
+              ▼               ▼
+     ┌─────────────────┐     ┌──────────────────────┐
+     │ Instant Physician│    │ Qdrant Vector Search │
+     │  Escalation UI  │     └──────────┬───────────┘
+     └─────────────────┘                │
+                                        ▼
+                             ┌──────────────────────┐
+                             │    Groq Inference    │
+                             └──────────┬───────────┘
+                                        │
+                                        ▼
+                             ┌──────────────────────┐
+                             │    Rime Voice TTS    │
+                             └──────────┬───────────┘
+                                        │ (MP3 Stream)
+                                        ▼
+                             ┌──────────────────────┐
+                             │ Audio Playback to UI │
+                             └──────────────────────┘
+
+🧰 Technology Stack
+Server Framework: FastAPI + Uvicorn
+
+Real-Time Transport: WebSockets + HTTPX
+
+Embeddings & Search: Qdrant + Sentence-Transformers (all-MiniLM-L6-v2)
+
+LLM Engine: Groq Cloud
+
+Speech Synthesis: Rime TTS
