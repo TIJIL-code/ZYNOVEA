@@ -1,12 +1,21 @@
 import os
+import sys
+from pathlib import Path
+
+# Ensure the backend directory is in sys.path before local imports
+BACKEND_DIR = Path(__file__).resolve().parent
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
 import re
 import json
 import asyncio
 import httpx
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
-from groq import Groq
+from groq import AsyncGroq
 from qdrant_helper import search_memory
 
 load_dotenv()
@@ -14,7 +23,7 @@ load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 RIME_API_KEY = os.getenv("RIME_API_KEY")
 
-groq_client = Groq(api_key=GROQ_API_KEY)
+groq_client = AsyncGroq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
 app = FastAPI(title="ZYNOVEA Voice AI Engine")
 
@@ -39,7 +48,7 @@ CLINICAL_TRIGGERS = [
     r"what should i take", r"recommend a drug"
 ]
 
-def evaluate_safety_firewall(text: str):
+def evaluate_safety_firewall(text: str) -> str:
     lowered = text.lower()
     for pattern in EMERGENCY_TRIGGERS:
         if re.search(pattern, lowered):
@@ -56,7 +65,6 @@ async def synthesize_rime_tts(text: str) -> bytes:
         async with httpx.AsyncClient(timeout=4.0) as client:
             response = await client.post(
                 "https://users.rime.ai/v1/rime-tts",
-                # Change "speaker" to a female voice model like "eva", "marisa", or "amber"
                 json={"speaker": "eva", "text": text, "modelId": "mistv3", "audioFormat": "mp3"},
                 headers={"Authorization": f"Bearer {RIME_API_KEY}"}
             )
@@ -71,26 +79,28 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     print("⚡ Client connected over WebSocket")
 
-    # Fast, punchy greeting for quick vocal output
     greeting_text = "Welcome to ZYNOVEA Clinic! How can I help you today?"
     audio_bytes = await synthesize_rime_tts(greeting_text)
-    
+
     await websocket.send_json({
         "type": "bot_response",
         "text": greeting_text,
         "escalated": False,
         "has_audio": len(audio_bytes) > 0
     })
-    
+
     if audio_bytes:
         await websocket.send_bytes(audio_bytes)
 
     try:
         while True:
             data = await websocket.receive_text()
-            message = json.loads(data)
+            try:
+                message = json.loads(data)
+            except Exception:
+                message = {"type": "user_transcript", "text": data}
 
-            if message.get("type") == "user_transcript":
+            if message.get("type") in ("user_transcript", "transcript"):
                 user_text = message.get("text", "").strip()
                 if not user_text:
                     continue
@@ -129,28 +139,38 @@ async def websocket_endpoint(websocket: WebSocket):
                         await websocket.send_bytes(audio_bytes)
                     continue
 
-                context = search_memory(user_text)
+                context = await asyncio.to_thread(search_memory, user_text)
 
                 system_prompt = (
-                    "You are ZYNOVEA, a concise administrative assistant for a medical clinic. "
-                    "You ONLY assist with clinic hours, locations, and appointment bookings. "
-                    "Keep answers under 2 short sentences so they speak quickly. "
+                    "You are ZYNOVEA, a concise administrative receptionist for a medical clinic. "
+                    "Assist with clinic hours, location, and appointment booking based on the context. "
+                    "Respond directly in 1 to 2 clear, helpful sentences.\n"
                     f"Clinic Context:\n{context}"
                 )
 
-                completion = groq_client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_text}
-                    ],
-                    temperature=0.2,
-                    max_tokens=90
-                )
+                if not groq_client:
+                    bot_text = "Groq API key is not configured. Please add GROQ_API_KEY to your .env file."
+                else:
+                    try:
+                        completion = await groq_client.chat.completions.create(
+                            model="openai/gpt-oss-20b",
+                            messages=[
+                                {"role": "system", "content": system_prompt},
+                                {"role": "user", "content": user_text}
+                            ],
+                            temperature=0.3,
+                            max_tokens=250
+                        )
+                        raw_content = completion.choices[0].message.content
+                        bot_text = raw_content.strip() if raw_content else ""
+                    except Exception as err:
+                        print(f"Groq API call failed: {err}")
+                        bot_text = "We are open Monday to Friday from 8:00 AM to 6:00 PM. How can I assist you with scheduling?"
 
-                bot_text = completion.choices[0].message.content
+                if not bot_text:
+                    bot_text = "We are open Monday to Friday from 8:00 AM to 6:00 PM. How can I help you today?"
+
                 print(f"🤖 ZYNOVEA: {bot_text}")
-
                 audio_bytes = await synthesize_rime_tts(bot_text)
 
                 await websocket.send_json({
@@ -167,6 +187,11 @@ async def websocket_endpoint(websocket: WebSocket):
         print("🔌 Client disconnected")
     except Exception as e:
         print(f"❌ Error: {e}")
+
+# Mount static frontend directory
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+if FRONTEND_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
 
 if __name__ == "__main__":
     import uvicorn
